@@ -1,3 +1,7 @@
+""" Given position of the knight on a chessboard. 
+Find the minimal amount of steps to move this knight towards 
+the another given position. Recover the full path.
+"""
 
 
 def create_board(fill): 
