@@ -54,22 +54,23 @@ class Var:
         return self.value is not None
     
     def __repr__(self): 
-        return f'Var("{self.name}", value={self.value}, domain={self._domain})'
+        _domain = None if self._domain == id_domain else self._domain.__name__
+        return f'Var("{self.name}", value={self.value}, domain={_domain})'
 
     def __str__(self): 
         return self.name
 
     def __add__(self, other): 
-        pass 
+        return Expression.from_variable(self).__add__(other)
 
     def __sub__(self, other): 
-        pass 
+        return Expression.from_variable(self).__sub__(other)
 
     def __mul__(self, other): 
-        pass 
+        return Expression.from_variable(self).__mul__(other)
 
     def __truediv__(self, other): 
-        pass 
+        return Expression.from_variable(self).__truediv__(other)
 
     def __hash__(self): 
         return hash(self._name)
@@ -84,7 +85,8 @@ class Var:
 # or variable only 
 AUXILIARY = {
     'CONST', 
-    'VAR'
+    'VAR', 
+    'FUNC',
 }
 
 
@@ -121,31 +123,85 @@ class Expression:
         """Create expression that is only variable."""
         return cls({var, }, operation='VAR', sons=[var,])
 
+    @classmethod
+    def from_callable(cls, func: callable, variables: MutableSet[Var]): 
+        # TODO: check whether amount of variables equals to args of func
+        return cls(variables, operation='FUNC', sons=[func])
+
+    @classmethod
+    def _wrapper(cls, other): 
+        if isinstance (other, Var): 
+            other = cls.from_variable(other)
+        elif isinstance(other, int) or isinstance(other, float) or isinstance(other, complex): 
+            other = cls.from_constant(other)
+        elif not isinstance(other, Expression): 
+            raise NotImplementedError()
+        return other 
+
     def __abs__(self): 
         return Expression(self._vars, operation='ABS', sons=[self])
 
     def __add__(self, other): 
-        if not isinstance(other, Expression): 
-            raise NotImplementedError()
+        other = self._wrapper(other)
         return Expression(self._vars | other._vars, operation='+', sons=[self, other])
-        
+    
     def __sub__(self, other): 
-        if not isinstance(other, Expression): 
-            raise NotImplementedError()
+        other = self._wrapper(other)
         return Expression(self._vars | other._vars, operation='-', sons=[self, other])
         
     def __mul__(self, other): 
-        if not isinstance(other, Expression): 
-            raise NotImplementedError()
+        other = self._wrapper(other)
         return Expression(self._vars | other._vars, operation='*', sons=[self, other])
     
     def __truediv__(self, other): 
-        if not isinstance(other, Expression): 
-            raise NotImplementedError()
+        other = self._wrapper(other)
         return Expression(self._vars | other._vars, operation='/', sons=[self, other])
 
+    def __xor__(self, other):
+        other = self._wrapper(other)
+        return Expression(self._vars | other._vars, operation='^', sons=[self, other])
+
+    def __radd__(self, other):
+        other = self._wrapper(other) 
+        return Expression(self._vars | other._vars, operation='+', sons=[other, self])
+
+    def __rsub__(self, other):
+        other = self._wrapper(other) 
+        return Expression(self._vars | other._vars, operation='-', sons=[other, self])
+
+    def __rmul__(self, other): 
+        other = self._wrapper(other) 
+        return Expression(self._vars | other._vars, operation='*', sons=[other, self])        
+    
+    def __rtruediv__(self, other):
+        other = self._wrapper(other) 
+        return Expression(self._vars | other._vars, operation='/', sons=[other, self])        
+
+    def __rxor__(self, other):
+        other = self._wrapper(other)
+        return Expression(self._vars | other._vars, operation='^', sons=[other, self])
+    
+    def __pow__(self, other): 
+        return self.__xor__(other)
+    
+    def __rpow__(self, other): 
+        return self.__rxor__(other)
+
+    def _repr(self, indent=1): 
+        sons_repr = '[\n'
+        for el in self._sons: 
+            if isinstance(el, Expression): 
+                sons_repr += el._repr(indent=indent+1)
+            else: 
+                sons_repr += '  ' * (indent + 1) + repr(el)
+            sons_repr += ',\n'
+        sons_repr += '  ' * indent + ']'
+        exp_tabs = '  ' * indent 
+        tabs = '  ' * (indent + 1)
+        return f'{exp_tabs}Expression(\n{tabs}variables={self._vars}, \n{tabs}operation="{self._operation}", \n{tabs}sons={sons_repr})'
+
     def __repr__(self): 
-        return f'Expression(variables={self._vars}, operation="{self._operation}", sons={self._sons})'
+        return self._repr(0)
 
     def __str__(self): 
         if self._operation in BINARY_OPS: 
@@ -154,8 +210,15 @@ class Expression:
             return f'({self._operation}{self._sons[0]})'
         elif self._operation in ["VAR", "CONST"]: 
             return str(self._sons[0])
+        elif self._operation == "FUNC": 
+            args = ', '.join(str(el) for el in self._vars)
+            return f'{self._sons[0].__name__}({args})'
         else: 
             raise NotImplementedError()
+
+    # TODO: 
+    def substitute(self, **kwargs): 
+        pass 
 
     def __call__(self, **kwargs): 
         for var in self._vars:
@@ -172,6 +235,11 @@ class Expression:
             return self._sons[0]
         elif self._operation == 'VAR': 
             return self._sons[0].value
+        elif self._operation == 'FUNC': 
+
+            # FIXME: check whether we shoudn't use kwargs
+            # TODO: finish implement
+            return self._sons[0](*self._vars)
         else: 
             raise NotImplementedError()
 
@@ -179,12 +247,7 @@ class Expression:
 x = Var('x', domain=domain_example)
 y = Var('y')
 
-x = Expression.from_variable(x)
-y = Expression.from_variable(y)
-tmp1 = Expression.from_constant(1)
-tmp2 = Expression.from_constant(2)
-
-exp = tmp2 * ((x + y) + tmp1)
+exp = 2 * ((x + y) + 1) ^ y
 
 # difference between __str__ and __repr__
 print("String representation of expression:", exp)
@@ -192,4 +255,69 @@ print("\n\nRepr of expression:\n\n", repr(exp))
 
 print('\n-----------------------------------------\n')
 print(exp(x=1, y=2))
-print(exp(x=20, y=-1))
+# print(exp(x=20, y=-1))
+
+
+test = Expression(
+  variables={Var("y", value=None, domain=None), Var("x", value=None, domain=domain_example)}, 
+  operation="^", 
+  sons=[
+  Expression(
+    variables={Var("y", value=None, domain=None), Var("x", value=None, domain=domain_example)}, 
+    operation="*", 
+    sons=[
+    Expression(
+      variables=set(), 
+      operation="CONST", 
+      sons=[
+      2,
+    ]),
+    Expression(
+      variables={Var("y", value=None, domain=None), Var("x", value=None, domain=domain_example)}, 
+      operation="+", 
+      sons=[
+      Expression(
+        variables={Var("y", value=None, domain=None), Var("x", value=None, domain=domain_example)}, 
+        operation="+", 
+        sons=[
+        Expression(
+          variables={Var("x", value=None, domain=domain_example)}, 
+          operation="VAR", 
+          sons=[
+          Var("x", value=None, domain=domain_example),
+        ]),
+        Expression(
+          variables={Var("y", value=None, domain=None)}, 
+          operation="VAR", 
+          sons=[
+          Var("y", value=None, domain=None),
+        ]),
+      ]),
+      Expression(
+        variables=set(), 
+        operation="CONST", 
+        sons=[
+        1,
+      ]),
+    ]),
+  ]),
+  Expression(
+    variables={Var("y", value=None, domain=None)}, 
+    operation="VAR", 
+    sons=[
+    Var("y", value=None, domain=None),
+  ]),
+])
+
+
+print(test)
+print(exp)
+
+
+def sin(x, y): 
+    return x + y - 3
+
+
+exp = Expression.from_callable(sin, {x, y})
+
+print(exp)
