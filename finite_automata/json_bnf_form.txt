@@ -1,0 +1,14 @@
+S -> VALUE . 
+VALUE -> OBJECT 
+       | ARRAY 
+       | STRING 
+       | "true" 
+       | "false" .
+ARRAY -> "[" PURE_ARRAY "]" . 
+PURE_ARRAY -> VALUE 
+           | PURE_ARRAY "," VALUE . 
+OBJECT -> "{" PURE_OBJECT "}" . 
+PURE_OBJECT -> PAIR 
+            |  PURE_OBJECT "," PAIR . 
+PAIR -> STRING ":" VALUE . 
+STRING -> "'string'" .

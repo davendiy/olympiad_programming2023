@@ -1,0 +1,12 @@
+EXPR -> EXPR "+" TERM
+     |   EXPR "-" TERM
+     |   TERM .
+
+TERM -> TERM "*" FACTOR
+     |   TERM "/" FACTOR
+     |   FACTOR .
+
+FACTOR -> "(" EXPR ")"
+       |    NUM . 
+
+NUM -> "3" .
